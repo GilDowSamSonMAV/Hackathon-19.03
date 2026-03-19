@@ -1,6 +1,6 @@
-import os
 import json
-import ollama
+from core.agent_loop import run_agent
+from core.config import GEMINI_MODEL, GEMINI_API_KEY
 
 # =============================================================================
 # PRACTICE GENERATOR AGENT
@@ -56,26 +56,26 @@ def generate_practice_questions(user_query: str, context: str) -> dict:
     # Format the user message to include the context
     user_message = f"User Request: {user_query}\n\n<context>\n{context}\n</context>"
     
-    # Call the LLM with JSON mode enabled
-    response = ollama.chat(
-        model="qwen2.5:14b",
-        messages=[
-            {"role": "system", "content": PRACTICE_GENERATOR_SYSTEM_PROMPT},
-            {"role": "user", "content": user_message}
-        ],
-        format='json',
-        options={"temperature": 0.2}
-    )
-    
-    # Parse the returned string into a Python dictionary
-    result_str = response['message']['content']
+    # Call the LLM using Gemini
     try:
-        return json.loads(result_str)
-    except json.JSONDecodeError:
+        raw_response = run_agent(
+            system_prompt=PRACTICE_GENERATOR_SYSTEM_PROMPT,
+            user_input=user_message,
+            model_name=GEMINI_MODEL
+        )
+        
+        # Parse the returned string into a Python dictionary
+        import re
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        return json.loads(raw_response)
+    except Exception as e:
+        print(f"Error generating practice questions: {e}")
         # Fallback if the model somehow failed to output valid JSON
         return {
             "agent": "practice_generator",
-            "answer": "Failed to parse generated questions.",
+            "answer": f"Failed to parse generated questions: {e}",
             "questions": [],
             "sources": [],
             "confidence": 0.0,
@@ -87,9 +87,9 @@ def generate_practice_questions(user_query: str, context: str) -> dict:
 # =============================================================================
 if __name__ == "__main__":
     # Ensure the API key is set before running
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("WARNING: OPENAI_API_KEY environment variable is not set.")
-        print("Please set it before running, e.g., 'set OPENAI_API_KEY=your_key_here'\n")
+    if not GEMINI_API_KEY:
+        print("WARNING: GEMINI_API_KEY environment variable is not set.")
+        print("Please set it before running, e.g., 'set GEMINI_API_KEY=your_key_here'\n")
     else:
         # Sample context and query for testing
         test_context = """

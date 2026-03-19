@@ -6,7 +6,7 @@ import json
 
 def build_agent_prompt(system_prompt: str, user_query: str, retrieved_chunks: list[dict]) -> list[dict]:
     """
-    Build the full message array for an Ollama API call.
+    Build the full message array for an LLM API call (Gemini, Ollama, etc.).
     
     retrieved_chunks format:
     [

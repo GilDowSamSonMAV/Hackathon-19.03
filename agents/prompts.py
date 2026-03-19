@@ -10,11 +10,10 @@ Designed using the 7-Layer Prompt Framework:
   6. CONSTRAINTS → What to never do
   7. FALLBACK    → What if it can't answer
 
-Optimized for qwen2.5:14b (14B parameter model via Ollama):
-  - Prompts kept under 400 words (smaller model = tighter attention)
+Optimized for Google Gemini 1.5 Flash:
   - XML tags for clear section boundaries
   - Explicit JSON output format with examples
-  - Strong negative instructions (Qwen follows "never" well)
+  - Strong negative instructions
   - Few-shot examples where routing accuracy matters
 """
 

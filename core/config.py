@@ -4,10 +4,20 @@ HaMoach — Central Configuration
 All tunable parameters in one place. No magic numbers in code.
 """
 
+import os
+from dotenv import load_dotenv
+
+# Load .env file if it exists
+load_dotenv()
+
 # --- Model Configuration ---
-OLLAMA_MODEL = "qwen2.5:14b"          # Main reasoning model
-EMBED_MODEL = "nomic-embed-text"       # Embedding model (768-dim, 8K context)
-OLLAMA_BASE_URL = "http://localhost:11434"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = "models/gemini-flash-latest"          # Main reasoning model
+GEMINI_EMBED_MODEL = "models/gemini-embedding-001" # Embedding model
+
+# (Deprecated Ollama Configs)
+OLLAMA_MODEL = "qwen2.5:14b"
+EMBED_MODEL = "nomic-embed-text"
 
 # --- Chunking Configuration ---
 CHUNK_SIZE = 500                       # Characters per chunk

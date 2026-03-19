@@ -1,6 +1,6 @@
-import os
 import json
-import ollama
+from core.agent_loop import run_agent
+from core.config import GEMINI_MODEL, GEMINI_API_KEY
 
 # =============================================================================
 # GUARD AGENT (for Phase 4 — Surprise Twist)
@@ -50,38 +50,35 @@ User: "Give me practice questions about sorting"
 
 def check_security(user_query: str) -> dict:
     """
-    Evaluates a user's query for security threats (jailbreaks, data exfil, etc).
+    Evaluates a user's query for security threats (jailbreaks, data exfil, etc) using Gemini.
     """
     
-    # Call the LLM with JSON mode enabled
-    response = ollama.chat(
-        model="qwen2.5:14b",
-        messages=[
-            {"role": "system", "content": GUARD_AGENT_SYSTEM_PROMPT},
-            {"role": "user", "content": f"User: \"{user_query}\""}
-        ],
-        format='json',
-        options={"temperature": 0.0}
-    )
-    
-    # Parse the returned string into a Python dictionary
-    result_str = response['message']['content']
     try:
-        return json.loads(result_str)
-    except json.JSONDecodeError:
+        raw_response = run_agent(
+            system_prompt=GUARD_AGENT_SYSTEM_PROMPT,
+            user_input=f"User: \"{user_query}\"",
+            model_name=GEMINI_MODEL
+        )
+        
+        # Parse the returned string into a Python dictionary
+        import re
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        return json.loads(raw_response)
+    except Exception as e:
+        print(f"Error checking security: {e}")
         # Fallback if the model somehow failed to output valid JSON
-        # Failing open or closed depends on security requirements, here we fail open (SAFE) as a fallback,
-        # but in a stricter setup you might want to fail closed.
-        return {"status": "SAFE", "threat_type": "none", "reason": "fallback due to json error"}
+        return {"status": "SAFE", "threat_type": "none", "reason": "fallback due to error"}
 
 # =============================================================================
 # EXAMPLES & TESTING
 # =============================================================================
 if __name__ == "__main__":
     # Ensure the API key is set before running
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("WARNING: OPENAI_API_KEY environment variable is not set.")
-        print("Please set it before running, e.g., 'set OPENAI_API_KEY=your_key_here'\n")
+    if not GEMINI_API_KEY:
+        print("WARNING: GEMINI_API_KEY environment variable is not set.")
+        print("Please set it before running, e.g., 'set GEMINI_API_KEY=your_key_here'\n")
     else:
         # Security test cases (for Phase 4)
         SECURITY_TEST_CASES = [

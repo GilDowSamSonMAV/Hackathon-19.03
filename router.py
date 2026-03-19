@@ -1,5 +1,6 @@
 import json
-import ollama
+from core.agent_loop import run_agent
+from core.config import GEMINI_MODEL
 
 # =============================================================================
 # ROUTER AGENT
@@ -49,27 +50,25 @@ User: "How do I declare an array in Java?"
 
 def route_query(user_query: str) -> dict:
     """
-    Routes a user's study query to the appropriate agent/category using Ollama.
-    Make sure Ollama is running locally and the model (e.g., 'llama3') is pulled.
+    Routes a user's study query to the appropriate agent/category using Gemini.
     """
     try:
-        # Call the local Ollama LLM with JSON mode enabled
-        response = ollama.chat(
-            model='qwen2.5:14b', # Change this to whichever model you have pulled in Ollama (e.g. 'mistral', 'llama3')
-            messages=[
-                {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
-                {"role": "user", "content": f"User: \"{user_query}\""}
-            ],
-            format='json',
-            options={"temperature": 0.0}
+        raw_response = run_agent(
+            system_prompt=ROUTER_SYSTEM_PROMPT,
+            user_input=f"User Query: \"{user_query}\"",
+            model_name=GEMINI_MODEL
         )
         
         # Parse the returned string into a Python dictionary
-        result_str = response['message']['content']
-        return json.loads(result_str)
+        # Find JSON block
+        import re
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        return json.loads(raw_response)
         
     except Exception as e:
-        print(f"Error connecting to Ollama: {e}")
+        print(f"Error routing query: {e}")
         return {"route": "concept", "reason": "fallback due to error"}
 
 # =============================================================================

@@ -6,36 +6,20 @@ set -e
 echo "🧠 HaMoach Pre-Sprint Setup"
 echo "=========================="
 
-# 1. Pull Ollama models
+# 1. Check for Gemini API Key
 echo ""
-echo "📦 Step 1: Pulling Ollama models..."
-echo "   (This takes 10-20 min on first run)"
-ollama pull qwen2.5:14b
-ollama pull nomic-embed-text
-
-# 2. Verify models work
-echo ""
-echo "🔍 Step 2: Verifying LLM..."
-RESPONSE=$(ollama run qwen2.5:14b "Respond with only: READY" 2>/dev/null | head -1)
-if echo "$RESPONSE" | grep -qi "READY"; then
-    echo "   ✅ qwen2.5:14b is working"
+echo "🔍 Step 1: Checking for GEMINI_API_KEY..."
+if [ -z "$GEMINI_API_KEY" ]; then
+    echo "   ⚠️  GEMINI_API_KEY is not set in your environment."
+    echo "   Please set it: export GEMINI_API_KEY='your_key_here'"
 else
-    echo "   ⚠️  qwen2.5:14b responded but output was: $RESPONSE"
+    echo "   ✅ GEMINI_API_KEY is set"
 fi
 
+# 2. Install Python dependencies
 echo ""
-echo "🔍 Step 3: Verifying embeddings..."
-python3 -c "
-import ollama
-result = ollama.embeddings(model='nomic-embed-text', prompt='search_document: test')
-dim = len(result['embedding'])
-print(f'   ✅ nomic-embed-text producing {dim}-dim vectors')
-" 2>/dev/null || echo "   ❌ Embedding test failed — check Ollama"
-
-# 3. Install Python dependencies
-echo ""
-echo "📦 Step 4: Installing Python dependencies..."
-pip install -q chromadb streamlit ollama pdfplumber pytest 2>/dev/null
+echo "📦 Step 2: Installing Python dependencies..."
+pip install -q -r requirements.txt
 echo "   ✅ Dependencies installed"
 
 # 4. Create project structure

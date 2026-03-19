@@ -10,7 +10,7 @@ Assumes Gil's rag.py exposes:
 
 import json
 import re
-import ollama
+import google.generativeai as genai
 
 # Import prompts (adjust path if your project structure differs)
 from prompts import (
@@ -22,26 +22,53 @@ from prompts import (
     build_agent_prompt,
     CONFIDENCE_LOW,
 )
+from core.config import GEMINI_API_KEY, GEMINI_MODEL
+from core.agent_loop import run_agent
 
-MODEL = "qwen2.5:14b"
+# Configure Gemini
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+MODEL = GEMINI_MODEL
 
 # =============================================================================
 # LLM CALL WRAPPER
 # =============================================================================
 
-def call_llm(messages: list[dict], temperature: float = 0.3) -> str:
-    """Call Ollama and return raw text response."""
-    response = ollama.chat(
-        model=MODEL,
-        messages=messages,
-        options={"temperature": temperature},
+def call_llm(messages: list[dict], temperature: float = 0.3, system_instruction: str = None) -> str:
+    """Call Gemini and return raw text response."""
+    # Convert messages to Gemini format
+    # messages are usually [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+    
+    # If first message is system, extract it
+    if messages and messages[0]["role"] == "system":
+        system_instruction = system_instruction or messages[0]["content"]
+        messages = messages[1:]
+    
+    model = genai.GenerativeModel(
+        model_name=MODEL,
+        system_instruction=system_instruction
     )
-    return response["message"]["content"]
+    
+    # Map roles to Gemini roles ('user', 'model')
+    gemini_history = []
+    for msg in messages[:-1]:
+        role = "user" if msg["role"] == "user" else "model"
+        gemini_history.append({"role": role, "parts": [msg["content"]]})
+    
+    chat = model.start_chat(history=gemini_history)
+    last_msg = messages[-1]["content"]
+    
+    response = chat.send_message(
+        last_msg,
+        generation_config=genai.types.GenerationConfig(temperature=temperature)
+    )
+    return response.text
 
 
-def call_llm_json(messages: list[dict], temperature: float = 0.1) -> dict:
-    """Call Ollama and parse JSON response. Retries once on parse failure."""
-    raw = call_llm(messages, temperature)
+def call_llm_json(messages: list[dict], temperature: float = 0.1, system_instruction: str = None) -> dict:
+    """Call Gemini and parse JSON response. Retries once on parse failure."""
+    raw = call_llm(messages, temperature, system_instruction)
     
     # Try to extract JSON from the response (model sometimes wraps in markdown)
     json_match = re.search(r'\{.*\}', raw, re.DOTALL)
@@ -56,7 +83,7 @@ def call_llm_json(messages: list[dict], temperature: float = 0.1) -> dict:
         {"role": "assistant", "content": raw},
         {"role": "user", "content": "Your response was not valid JSON. Respond with ONLY a JSON object. No markdown, no explanation, no text outside the JSON."}
     ]
-    raw_retry = call_llm(retry_messages, temperature=0.0)
+    raw_retry = call_llm(retry_messages, temperature=0.0, system_instruction=system_instruction)
     json_match = re.search(r'\{.*\}', raw_retry, re.DOTALL)
     if json_match:
         try:

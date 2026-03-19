@@ -9,20 +9,22 @@ from pathlib import Path
 from typing import Callable
 
 import chromadb
-try:
-    import ollama
-except ImportError:  # pragma: no cover - handled in embed_text at runtime
-    ollama = None
+import google.generativeai as genai
 
 from core.config import (
     CHROMA_PERSIST_DIR,
     CHUNK_OVERLAP,
     CHUNK_SIZE,
     DOCS_FOLDER,
-    EMBED_MODEL,
+    GEMINI_API_KEY,
+    GEMINI_EMBED_MODEL,
     MIN_CHUNK_SIZE,
     SANITIZE_ON_INGEST,
 )
+
+# Configure Gemini
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 from core.sanitizer import sanitize_document
 
 DEFAULT_COLLECTION_NAME = "course_docs"
@@ -87,20 +89,24 @@ def chunk_text(
 
 
 def embed_text(text: str, prefix: str) -> list[float]:
-    if ollama is None:
-        raise RuntimeError(
-            "The 'ollama' package is required for live embeddings. "
-            "Install requirements or pass a custom embedding_fn."
-        )
+    """
+    Get embeddings using Gemini.
+    Prefix is used for context (e.g. 'search_document: ' or 'search_query: ').
+    """
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set.")
 
-    payload = f"{prefix}{text}"
-
-    if hasattr(ollama, "embed"):
-        response = ollama.embed(model=EMBED_MODEL, input=payload)
-        embeddings = response["embeddings"]
-        return embeddings[0] if embeddings and isinstance(embeddings[0], list) else embeddings
-
-    response = ollama.embeddings(model=EMBED_MODEL, prompt=payload)
+    # Gemini text-embedding-004 handles task_type. 
+    # For RAG, we typically use RETRIEVAL_DOCUMENT for indexing and RETRIEVAL_QUERY for search.
+    task_type = "RETRIEVAL_DOCUMENT" if "document" in prefix else "RETRIEVAL_QUERY"
+    
+    response = genai.embed_content(
+        model=GEMINI_EMBED_MODEL,
+        content=text,
+        task_type=task_type,
+        title="Course Document" if task_type == "RETRIEVAL_DOCUMENT" else None
+    )
+    
     return response["embedding"]
 
 

@@ -14,9 +14,13 @@ import json
 import re
 from typing import Any, Callable
 
-import ollama
+import google.generativeai as genai
 
-from core.config import OLLAMA_MODEL
+from core.config import GEMINI_API_KEY, GEMINI_MODEL
+
+# Configure Gemini
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 MAX_TOOL_ROUNDS = 3
 
@@ -48,37 +52,37 @@ def run_agent(
     system_prompt: str,
     user_input: str,
     tools: ToolMap | None = None,
-    model: str = OLLAMA_MODEL,
-    num_ctx: int = 8192,
+    model_name: str = GEMINI_MODEL,
 ) -> str:
     """
-    Run a single agent turn with optional tool calling.
+    Run a single agent turn with optional tool calling using Gemini.
 
     Args:
         system_prompt: The agent's system prompt.
         user_input: The user's message.
         tools: Optional dict mapping tool names to callables(query -> str).
-        model: Ollama model name.
-        num_ctx: Context window size.
+        model_name: Gemini model name.
 
     Returns:
         The agent's final text response (after any tool-calling rounds).
     """
     tools = tools or {}
 
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_input},
-    ]
+    # Initialize model with system instruction
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        system_instruction=system_prompt
+    )
+
+    # Gemini uses 'user' and 'model' roles
+    # We'll use a chat session for multi-turn if tool calling is needed
+    chat = model.start_chat(history=[])
+    
+    current_input = user_input
 
     for _round in range(MAX_TOOL_ROUNDS + 1):
-        response = ollama.chat(
-            model=model,
-            messages=messages,
-            options={"num_ctx": num_ctx},
-        )
-        assistant_text: str = response["message"]["content"]
-        messages.append({"role": "assistant", "content": assistant_text})
+        response = chat.send_message(current_input)
+        assistant_text = response.text
 
         # Check for tool call
         if not tools:
@@ -95,10 +99,7 @@ def run_agent(
 
         # Execute tool and feed result back
         tool_result = tools[tool_name](tool_query)
-        messages.append({
-            "role": "user",
-            "content": f"[Tool result from '{tool_name}']:\n{tool_result}",
-        })
+        current_input = f"[Tool result from '{tool_name}']:\n{tool_result}"
 
     # Exhausted rounds — return last response
     return assistant_text
