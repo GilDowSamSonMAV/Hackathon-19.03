@@ -1,6 +1,6 @@
 import os
 import json
-from openai import OpenAI
+import ollama
 
 # =============================================================================
 # PRACTICE GENERATOR AGENT
@@ -51,27 +51,24 @@ Respond in valid JSON only:
 def generate_practice_questions(user_query: str, context: str) -> dict:
     """
     Generates practice questions based on the provided context and user query.
-    Needs the OPENAI_API_KEY environment variable set.
     """
-    # Initialize the OpenAI client
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     
     # Format the user message to include the context
     user_message = f"User Request: {user_query}\n\n<context>\n{context}\n</context>"
     
     # Call the LLM with JSON mode enabled
-    response = client.chat.completions.create(
-        model="gpt-4o-mini", # Could be changed to a more capable model if needed
+    response = ollama.chat(
+        model="qwen2.5:14b",
         messages=[
             {"role": "system", "content": PRACTICE_GENERATOR_SYSTEM_PROMPT},
             {"role": "user", "content": user_message}
         ],
-        response_format={"type": "json_object"},
-        temperature=0.2, # Low temperature to stay grounded in the provided context
+        format='json',
+        options={"temperature": 0.2}
     )
     
     # Parse the returned string into a Python dictionary
-    result_str = response.choices[0].message.content
+    result_str = response['message']['content']
     try:
         return json.loads(result_str)
     except json.JSONDecodeError:

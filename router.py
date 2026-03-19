@@ -55,7 +55,7 @@ def route_query(user_query: str) -> dict:
     try:
         # Call the local Ollama LLM with JSON mode enabled
         response = ollama.chat(
-            model='llama3', # Change this to whichever model you have pulled in Ollama (e.g. 'mistral', 'llama3')
+            model='qwen2.5:14b', # Change this to whichever model you have pulled in Ollama (e.g. 'mistral', 'llama3')
             messages=[
                 {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
                 {"role": "user", "content": f"User: \"{user_query}\""}

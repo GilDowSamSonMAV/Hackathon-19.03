@@ -1,6 +1,6 @@
 import os
 import json
-from openai import OpenAI
+import ollama
 
 # =============================================================================
 # GUARD AGENT (for Phase 4 — Surprise Twist)
@@ -51,24 +51,21 @@ User: "Give me practice questions about sorting"
 def check_security(user_query: str) -> dict:
     """
     Evaluates a user's query for security threats (jailbreaks, data exfil, etc).
-    Needs the OPENAI_API_KEY environment variable set.
     """
-    # Initialize the OpenAI client
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     
     # Call the LLM with JSON mode enabled
-    response = client.chat.completions.create(
-        model="gpt-4o-mini", # Fast & cheap model, perfect for a guard
+    response = ollama.chat(
+        model="qwen2.5:14b",
         messages=[
             {"role": "system", "content": GUARD_AGENT_SYSTEM_PROMPT},
             {"role": "user", "content": f"User: \"{user_query}\""}
         ],
-        response_format={"type": "json_object"},
-        temperature=0.0, # 0.0 temperature for maximum determinism/consistency in security evaluation
+        format='json',
+        options={"temperature": 0.0}
     )
     
     # Parse the returned string into a Python dictionary
-    result_str = response.choices[0].message.content
+    result_str = response['message']['content']
     try:
         return json.loads(result_str)
     except json.JSONDecodeError:
