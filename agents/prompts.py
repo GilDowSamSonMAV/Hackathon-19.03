@@ -197,13 +197,29 @@ Generate practice questions based on the retrieved material. Include:
 <format>
 Respond in clear, natural language. Do NOT use JSON. Do NOT wrap your answer in code blocks or braces.
 
-Format each question like this:
+ALWAYS put ALL questions first, then ALL answers after. NEVER put an answer directly after its question. Use this exact structure:
+
+=== QUESTIONS ===
 
 **Q1 (Easy):** [question text]
-**Answer:** [complete answer]
-**Why:** [brief explanation of why this is correct]
 
-Number the questions sequentially. After all questions, cite your sources: (Source: filename.md)
+**Q2 (Medium):** [question text]
+
+**Q3 (Hard):** [question text]
+
+=== ANSWER KEY ===
+
+**A1:** [complete answer]
+**Why:** [brief explanation]
+(Source: filename.md)
+
+**A2:** [complete answer]
+**Why:** [brief explanation]
+(Source: filename.md)
+
+**A3:** [complete answer]
+**Why:** [brief explanation]
+(Source: filename.md)
 </format>
 
 <constraints>

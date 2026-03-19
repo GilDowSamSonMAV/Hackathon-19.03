@@ -117,10 +117,21 @@ with st.sidebar:
 st.title(STREAMLIT_TITLE)
 st.caption(STREAMLIT_SUBTITLE)
 
+def _render_answer(content: str, agent: str = "") -> None:
+    """Render an answer, hiding the answer key for practice questions."""
+    if agent == "practice_generator" and "=== ANSWER KEY ===" in content:
+        parts = content.split("=== ANSWER KEY ===", 1)
+        st.markdown(parts[0])
+        with st.expander("Show Answer Key", expanded=False):
+            st.markdown(parts[1])
+    else:
+        st.markdown(content)
+
+
 # Replay conversation history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        _render_answer(msg["content"], msg.get("agent", ""))
         if msg.get("agent"):
             agent_display = AGENT_NAMES.get(msg["agent"], msg["agent"])
             confidence = msg.get("confidence", 0)
@@ -139,7 +150,7 @@ if user_input := st.chat_input("Ask about your course materials..."):
             try:
                 result: AgentResponse = run_pipeline(user_input)
 
-                st.markdown(result.answer)
+                _render_answer(result.answer, result.agent_name)
 
                 agent_display = AGENT_NAMES.get(result.agent_name, result.agent_name)
                 confidence = result.confidence
