@@ -24,6 +24,7 @@ MANIFEST
 
 # Environments
 .env
+.env.*
 .venv
 env/
 venv/
@@ -31,9 +32,20 @@ ENV/
 env.bak/
 venv.bak/
 
+# ChromaDB local storage
+chroma_db/
+
 # HaMoach Test Artifacts
 tests/_tmp_*/
 tests/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store

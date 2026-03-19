@@ -13,7 +13,7 @@ Designed using the 7-Layer Prompt Framework:
 Optimized for qwen2.5:14b (14B parameter model via Ollama):
   - Prompts kept under 400 words (smaller model = tighter attention)
   - XML tags for clear section boundaries
-  - Explicit JSON output format with examples
+  - Natural language output (no JSON — avoids raw JSON leaking into UI)
   - Strong negative instructions (Qwen follows "never" well)
   - Few-shot examples where routing accuracy matters
 """
@@ -151,25 +151,20 @@ When comparing concepts (e.g., "compare X vs Y"), use a structured comparison �
 </task>
 
 <format>
-Respond with this JSON structure:
-{{
-  "answer": "<your explanation in clear, well-structured text>",
-  "sources": [
-    {{"document": "<filename>", "chunk_id": <int>, "relevance_score": <float>}}
-  ],
-  "confidence": <float 0.0-1.0>
-}}
+Respond in clear, natural language. Do NOT use JSON. Do NOT wrap your answer in code blocks or braces.
 
-The confidence score reflects how well the retrieved chunks cover the question:
-- 0.8-1.0: The answer is fully supported by the course materials
-- 0.5-0.79: Partial answer — some information found but gaps exist
-- Below 0.5: Insufficient information in the materials
+Structure your answer as:
+1. A direct definition or answer (1-2 sentences)
+2. Elaboration with details and examples from the material
+3. At the end, cite your sources inline like: (Source: filename.md)
+
+If the retrieved chunks don't fully cover the question, say so clearly.
 </format>
 
 <constraints>
 - NEVER make up information not present in the retrieved chunks
 - NEVER reference external knowledge — only use the provided course material
-- If the retrieved chunks don't contain relevant information, set confidence below 0.5 and state clearly: "I don't have enough information in the course materials to answer this reliably."
+- If the retrieved chunks don't contain relevant information, state clearly: "I don't have enough information in the course materials to answer this reliably."
 - Do not hallucinate code examples that aren't in the material
 - Keep explanations concise — aim for 100-300 words unless a comparison table is needed
 </constraints>"""
@@ -200,22 +195,15 @@ Generate practice questions based on the retrieved material. Include:
 </task>
 
 <format>
-Respond with this JSON structure:
-{{
-  "questions": [
-    {{
-      "question": "<question text>",
-      "difficulty": "easy|medium|hard",
-      "answer": "<complete answer>",
-      "explanation": "<why this is the correct answer>",
-      "source_document": "<filename>"
-    }}
-  ],
-  "sources": [
-    {{"document": "<filename>", "chunk_id": <int>, "relevance_score": <float>}}
-  ],
-  "confidence": <float 0.0-1.0>
-}}
+Respond in clear, natural language. Do NOT use JSON. Do NOT wrap your answer in code blocks or braces.
+
+Format each question like this:
+
+**Q1 (Easy):** [question text]
+**Answer:** [complete answer]
+**Why:** [brief explanation of why this is correct]
+
+Number the questions sequentially. After all questions, cite your sources: (Source: filename.md)
 </format>
 
 <constraints>
@@ -224,7 +212,7 @@ Respond with this JSON structure:
 - If no number specified, generate 5 questions by default
 - Each question must be answerable using the course material
 - Include at least one easy, one medium, and one hard question
-- If the retrieved chunks don't contain enough material, set confidence below 0.5 and explain
+- If the retrieved chunks don't contain enough material, say so and generate fewer questions
 - NEVER create questions about topics not covered in the retrieved chunks
 </constraints>"""
 
@@ -256,30 +244,15 @@ For FOLLOW-UP messages (student has answered): evaluate their answer and ask the
 </task>
 
 <format>
-For the FIRST message (asking a question):
-{{
-  "mode": "asking",
-  "question": "<your exam question>",
-  "difficulty": "easy|medium|hard",
-  "hint": "<optional subtle hint>",
-  "sources": [
-    {{"document": "<filename>", "chunk_id": <int>, "relevance_score": <float>}}
-  ],
-  "confidence": <float 0.0-1.0>
-}}
+Respond in clear, natural language. Do NOT use JSON. Do NOT wrap your answer in code blocks or braces.
 
-For EVALUATION messages (after student answers):
-{{
-  "mode": "evaluating",
-  "score": <1-5>,
-  "feedback": "<detailed feedback on what was correct and what was wrong>",
-  "ideal_answer": "<the complete correct answer from course material>",
-  "next_question": "<next exam question, or null if session should end>",
-  "sources": [
-    {{"document": "<filename>", "chunk_id": <int>, "relevance_score": <float>}}
-  ],
-  "confidence": <float 0.0-1.0>
-}}
+When ASKING a question, write it directly as natural text. You may add a hint in parentheses.
+
+When EVALUATING a student's answer, use this format:
+**Score:** [1-5]/5
+**Feedback:** [what was correct and what was wrong]
+**Ideal answer:** [the complete correct answer from course material]
+Then ask your next question naturally.
 
 Scoring rubric:
 5 — Complete and accurate, demonstrates deep understanding
@@ -287,13 +260,15 @@ Scoring rubric:
 3 — Partially correct, missing key elements
 2 — Shows some understanding but significant errors
 1 — Incorrect or irrelevant
+
+Cite sources at the end: (Source: filename.md)
 </format>
 
 <constraints>
 - ONLY ask questions answerable from the retrieved course material
 - Be encouraging but honest in feedback — don't sugarcoat wrong answers
 - If the student's answer is partially correct, acknowledge what they got right before addressing errors
-- If the retrieved chunks don't contain enough material, set confidence below 0.5
+- If the retrieved chunks don't contain enough material, say so clearly
 - NEVER reveal the answer before the student attempts it
 - Ask one question at a time — never dump multiple questions
 </constraints>"""

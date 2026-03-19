@@ -48,44 +48,158 @@ def _format_chunks_for_prompt(chunks: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-def _parse_specialist_response(raw: str, agent_name: str) -> AgentResponse:
-    """Try to parse JSON from the specialist's response, with fallback."""
-    # Try to find JSON in the response
-    for match in re.finditer(r'\{[\s\S]*\}', raw):
-        try:
-            data = json.loads(match.group())
-            # Concept explainer / exam coach
-            answer = data.get("answer", "")
-            # Exam coach might have "question" or "feedback" instead
-            if not answer:
-                answer = data.get("question", "")
-            if not answer:
-                answer = data.get("feedback", "")
-            # Practice generator has "questions" list
-            if not answer and "questions" in data:
-                questions = data["questions"]
-                formatted = []
-                for q in questions:
-                    formatted.append(
-                        f"**Q ({q.get('difficulty', '?')}):** {q.get('question', '')}\n"
-                        f"**A:** {q.get('answer', '')}\n"
-                        f"*{q.get('explanation', '')}*"
-                    )
-                answer = "\n\n---\n\n".join(formatted)
+def _find_json_objects(text: str) -> list[tuple[int, int, dict]]:
+    """Find valid JSON objects in text by scanning for balanced braces.
 
-            return AgentResponse(
-                answer=answer or raw,
-                sources=data.get("sources", []),
-                confidence=float(data.get("confidence", 0.5)),
-                agent_name=agent_name,
-                raw_response=raw,
+    Returns a list of (start_index, end_index, parsed_dict) tuples.
+    Uses a brace-counting approach instead of greedy regex to avoid
+    matching from the first '{' to the last '}' across the entire response.
+    """
+    results = []
+    i = 0
+    while i < len(text):
+        if text[i] == '{':
+            depth = 0
+            in_string = False
+            escape_next = False
+            for j in range(i, len(text)):
+                ch = text[j]
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == '\\' and in_string:
+                    escape_next = True
+                    continue
+                if ch == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[i:j + 1]
+                        try:
+                            data = json.loads(candidate)
+                            if isinstance(data, dict):
+                                results.append((i, j + 1, data))
+                        except (json.JSONDecodeError, ValueError):
+                            pass
+                        break
+        i += 1
+    return results
+
+
+def _strip_json_blocks(text: str) -> str:
+    """Remove all JSON object blocks from text and clean up whitespace."""
+    json_objects = _find_json_objects(text)
+    if not json_objects:
+        return text
+    # Remove JSON blocks from end to start to preserve indices
+    result = text
+    for start, end, _ in reversed(json_objects):
+        result = result[:start] + result[end:]
+    # Clean up leftover whitespace / blank lines
+    result = re.sub(r'\n{3,}', '\n\n', result).strip()
+    return result
+
+
+def _extract_answer_from_json(data: dict) -> str:
+    """Extract the human-readable answer from a parsed JSON response."""
+    # Direct answer fields (concept explainer, general)
+    for key in ("answer", "question", "feedback"):
+        val = data.get(key)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+
+    # Practice generator: "questions" list
+    if "questions" in data and isinstance(data["questions"], list):
+        questions = data["questions"]
+        formatted = []
+        for i, q in enumerate(questions, 1):
+            if not isinstance(q, dict):
+                continue
+            formatted.append(
+                f"**Q{i} ({q.get('difficulty', '?')}):** {q.get('question', '')}\n"
+                f"**Answer:** {q.get('answer', '')}\n"
+                f"*{q.get('explanation', '')}*"
             )
-        except (json.JSONDecodeError, ValueError, TypeError):
-            continue
+        if formatted:
+            return "\n\n---\n\n".join(formatted)
 
-    # Fallback: return raw text as the answer
+    # Exam coach evaluation with next_question
+    parts = []
+    if data.get("score"):
+        parts.append(f"**Score:** {data['score']}/5")
+    if data.get("feedback"):
+        parts.append(f"**Feedback:** {data['feedback']}")
+    if data.get("ideal_answer"):
+        parts.append(f"**Ideal answer:** {data['ideal_answer']}")
+    if data.get("next_question"):
+        parts.append(f"\n{data['next_question']}")
+    if parts:
+        return "\n\n".join(parts)
+
+    return ""
+
+
+def _parse_specialist_response(raw: str, agent_name: str) -> AgentResponse:
+    """Parse the specialist's response, stripping any leaked JSON.
+
+    Strategy:
+    1. Look for JSON objects in the response.
+    2. If found, extract the answer field from JSON and also capture
+       any natural-language text that appears BEFORE the JSON block.
+    3. Prefer pre-JSON natural text (the LLM often writes a good answer
+       then appends JSON). Fall back to the extracted JSON field.
+    4. Always strip raw JSON from the final answer string.
+    """
+    json_objects = _find_json_objects(raw)
+
+    if json_objects:
+        # Use the first valid JSON object for metadata
+        start, end, data = json_objects[0]
+
+        # Text before the first JSON block (often the natural-language answer)
+        pre_json_text = raw[:start].strip()
+        # Text after the last JSON block
+        post_json_text = raw[json_objects[-1][1]:].strip()
+
+        # Extract answer from JSON fields
+        json_answer = _extract_answer_from_json(data)
+
+        # Decide which text to use as the answer:
+        # - If there's substantial pre-JSON text, prefer it (the LLM wrote
+        #   a natural response then appended JSON for structure)
+        # - Otherwise use the extracted JSON answer
+        if pre_json_text and len(pre_json_text) > 20:
+            answer = pre_json_text
+            # Append any post-JSON text too
+            if post_json_text:
+                answer += "\n\n" + post_json_text
+        elif json_answer:
+            answer = json_answer
+        else:
+            # Last resort: strip JSON from raw and use whatever remains
+            answer = _strip_json_blocks(raw)
+
+        # Final safety: strip any remaining JSON blocks from the answer
+        answer = _strip_json_blocks(answer)
+
+        return AgentResponse(
+            answer=answer or raw,
+            sources=data.get("sources", []),
+            confidence=float(data.get("confidence", 0.5)),
+            agent_name=agent_name,
+            raw_response=raw,
+        )
+
+    # No JSON found — return raw text (now expected, since prompts ask
+    # for natural language)
     return AgentResponse(
-        answer=raw,
+        answer=raw.strip(),
         sources=[],
         confidence=0.5,
         agent_name=agent_name,

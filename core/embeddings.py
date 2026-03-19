@@ -22,7 +22,13 @@ from core.config import (
     EMBED_MODEL,
     MIN_CHUNK_SIZE,
     SANITIZE_ON_INGEST,
+    SUPPORTED_EXTENSIONS,
 )
+
+try:
+    import pdfplumber
+except ImportError:  # pragma: no cover
+    pdfplumber = None
 from core.sanitizer import sanitize_document
 
 DEFAULT_COLLECTION_NAME = "course_docs"
@@ -48,12 +54,47 @@ def get_collection(
     client = client or get_chroma_client()
     return client.get_or_create_collection(
         name=name,
-        metadata={"hf:space": "cosine"},
+        metadata={"hnsw:space": "cosine"},
     )
 
 
-def read_markdown_documents(docs_path: str | Path = DOCS_FOLDER) -> list[Path]:
-    return sorted(Path(docs_path).glob("*.md"))
+def read_documents(docs_path: str | Path = DOCS_FOLDER) -> list[Path]:
+    """Scan docs_path for all files matching SUPPORTED_EXTENSIONS."""
+    folder = Path(docs_path)
+    files: list[Path] = []
+    for ext in SUPPORTED_EXTENSIONS:
+        files.extend(folder.glob(f"*{ext}"))
+    return sorted(set(files))
+
+
+def read_file_content(file_path: Path) -> str:
+    """Read file content, routing by extension. Returns empty string on failure."""
+    ext = file_path.suffix.lower()
+
+    if ext == ".pdf":
+        if pdfplumber is None:
+            print(f"Warning: pdfplumber not installed, skipping {file_path.name}")
+            return ""
+        try:
+            pages: list[str] = []
+            with pdfplumber.open(file_path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        pages.append(text)
+            if not pages:
+                print(f"Warning: no extractable text in {file_path.name} (scanned PDF?)")
+                return ""
+            return "\n\n".join(pages)
+        except Exception as e:
+            print(f"Warning: failed to read {file_path.name}: {e}")
+            return ""
+
+    # .md, .txt, and other text files
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return file_path.read_text(encoding="latin-1")
 
 
 def chunk_text(
@@ -107,8 +148,11 @@ def embed_text(text: str, prefix: str) -> list[float]:
 def build_chunk_records(docs_path: str | Path = DOCS_FOLDER) -> list[ChunkRecord]:
     records: list[ChunkRecord] = []
 
-    for doc_path in read_markdown_documents(docs_path):
-        content = doc_path.read_text(encoding="utf-8")
+    for doc_path in read_documents(docs_path):
+        content = read_file_content(doc_path)
+        if not content.strip():
+            continue
+
         if SANITIZE_ON_INGEST:
             content, _ = sanitize_document(doc_path.name, content)
 

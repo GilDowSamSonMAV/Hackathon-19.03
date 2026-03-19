@@ -15,6 +15,7 @@ from core.config import (
     STREAMLIT_TITLE,
     STREAMLIT_SUBTITLE,
 )
+from core.config import SUPPORTED_EXTENSIONS
 from core.embeddings import ingest_documents
 from agents.specialists import run_pipeline, AgentResponse
 
@@ -43,9 +44,12 @@ with st.sidebar:
 
     # Ingest button
     docs_path = Path(DOCS_FOLDER)
-    doc_count = len(list(docs_path.glob("*.md"))) if docs_path.exists() else 0
+    doc_count = 0
+    if docs_path.exists():
+        for ext in SUPPORTED_EXTENSIONS:
+            doc_count += len(list(docs_path.glob(f"*{ext}")))
 
-    st.caption(f"Found **{doc_count}** markdown files in `{DOCS_FOLDER}`")
+    st.caption(f"Found **{doc_count}** document(s) in `{DOCS_FOLDER}`")
 
     if st.button("🔄 Ingest Documents", use_container_width=True):
         with st.spinner("Embedding documents..."):
@@ -66,8 +70,8 @@ with st.sidebar:
     st.divider()
     st.subheader("Upload New Documents")
     uploaded = st.file_uploader(
-        "Add .md files",
-        type=["md", "txt"],
+        "Add documents",
+        type=["md", "txt", "pdf"],
         accept_multiple_files=True,
     )
     if uploaded:
